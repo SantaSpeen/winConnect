@@ -1,2 +1,4 @@
+# python 3.13
+# 12.03.2025
 pywin32~=309
 ormsgpack~=1.8.0
