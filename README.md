@@ -7,8 +7,11 @@ Communicate Client-Server via Windows NamedPipe
 - [x] Add support for other header settings
 - [x] Add support for safe closing
 - [x] Add logging
-- [ ] Particular client to client communication (via chunks(?))
+- [ ] Send data in chunks (if data is too large)
 - [ ] Add support for encryption
+  - [ ] simple (via char shift; and auto-pairing)
+  - [ ] password (via AES and PBKDF2)
+  - [ ] certificate  (via RSA)
 - [ ] Add support for multiple clients
 
 
