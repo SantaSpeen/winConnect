@@ -6,28 +6,30 @@ from pathlib import Path
 
 from setuptools import setup
 
+here = Path(__file__).parent.resolve()
 _name = 'winConnect'
 
-packages = [_name]
+packages = [_name, ]
 package_dir = {_name: _name}
-lib_path = Path(_name).resolve()
+lib_path = here / _name
 
+requires = [
+    "pywin32==309",
+    "ormsgpack==1.8.0"
+]
 
 # 'setup.py publish' shortcut.
 if sys.argv[-1] == 'publish':
     os.system('py -m build')
-    os.system('py -m twine upload --repository pypi dist/*')
+    os.system('py -m twine upload -r pypi dist/*')
     sys.exit()
 
-with open(lib_path.parent / 'requirements.txt', 'r', encoding='utf-8') as f:
-    requires = f.read().splitlines()
+with open(here / 'README.md', 'r', encoding='utf-8') as f:
+    readme = f.read()
 
 about = {}
-with open(lib_path / '__init__.py', 'r', encoding='utf-8') as f:
+with open(lib_path / '__meta__.py', 'r', encoding='utf-8') as f:
     exec(f.read(), about)
-
-with open(lib_path.parent / 'README.md', 'r', encoding='utf-8') as f:
-    readme = f.read()
 
 setup(
     name=about['__title__'],
@@ -54,8 +56,8 @@ setup(
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
         "Programming Language :: Python :: 3.13",
-        "License :: MIT License",
-        "Operating System :: Windows",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: Microsoft :: Windows",
     ],
     project_urls={
         'Source': 'https://github.com/SantaSpeen/winConnect',
