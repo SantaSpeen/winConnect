@@ -1,5 +1,5 @@
 # winConnect (Windows Only)
-Communication Client->Daemon via NamedPipe
+Communicate Client-Server via Windows NamedPipe
 
 ## ToDo:
 
@@ -11,9 +11,20 @@ Communication Client->Daemon via NamedPipe
 - [ ] Add support for encryption
 - [ ] Add support for multiple clients
 
+
 ## Description
 
 This is a simple client-server communication system for Windows. The client and server communicate via a named pipe. The client sends a message to the server, and the server responds with a message. The client and server can be run on the same machine or on different machines.
+
+## Installation
+
+To install the package, use the following command:
+
+```bash
+
+pip install winConnect
+
+```
 
 ## Usage
 
@@ -51,18 +62,6 @@ with connector as conn:
         conn.send_data(i)
         print(conn.read_pipe())
 ```
-
-[//]: # (## Installation)
-
-[//]: # ()
-[//]: # (To install the package, use the following command:)
-
-[//]: # ()
-[//]: # (```bash)
-
-[//]: # (pip install winConnect)
-
-[//]: # (```)
 
 ## License
 
