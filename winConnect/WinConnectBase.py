@@ -30,8 +30,7 @@ class WinConnectErrors(Enum):
 
 class WinConnectBase:
     init_encoding = 'utf-8'
-    init_header_format = ">L"  # Format for reading header (big-endian, unsigned long)
-    init_header_size = 32  # bits; Size of header
+    init_header_format = ">L"  # Format for reading header (big-endian, unsigned long; 4 bytes)
 
     default_encoding = 'utf-8'
 
@@ -44,8 +43,9 @@ class WinConnectBase:
         self._pipe = None
         self._opened = False
 
-        self.header_format = self.init_header_format
-        self.header_size = self.init_header_size // 8  # bytes
+        self._header_format = self.init_header_format
+        self._header_size = struct.calcsize(self._header_format)  # bytes
+        self._calc_body_max_size()
 
         self._client_connected = False
         self._inited = False
@@ -55,9 +55,20 @@ class WinConnectBase:
 
         self._lock = threading.Lock()
 
-    def set_header_settings(self, format, size):
-        self.header_format = format
-        self.header_size = size // 8
+    def _calc_body_max_size(self):
+        # Max size of body: 2 ** (8 * header_size) - 1 - header_size - 1
+        # - header_size; X byte for header_size
+        self._body_max_size = SimpleConvertor.struct_range(self._header_format)[1] - self._header_size
+
+    def set_header_settings(self, fmt):
+        if self._client_connected:
+            raise WinConnectSessionAlreadyActiveError("Session is active. Can't change header settings")
+        try:
+            self._header_format = fmt
+            self._header_size = struct.calcsize(fmt)
+            self._calc_body_max_size()
+        except struct.error as e:
+            raise WinConnectStructFormatError(f"Error in struct format. ({e})")
 
     @property
     def pipe_name(self):
