@@ -7,7 +7,7 @@ Communication Client->Daemon via NamedPipe
 - [x] Add support for other header settings
 - [x] Add support for safe closing
 - [x] Add logging
-- [ ] Particular client to client communication
+- [ ] Particular client to client communication (via chunks(?))
 - [ ] Add support for encryption
 - [ ] Add support for multiple clients
 
