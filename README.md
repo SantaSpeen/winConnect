@@ -3,12 +3,13 @@ Communication Client->Daemon via NamedPipe
 
 ## ToDo:
 
+- [x] Add support for sending and receiving data
 - [x] Add support for other header settings
-- [ ] Add logging
 - [x] Add support for safe closing
-- [ ] Add support for multiple clients
+- [x] Add logging
 - [ ] Particular client to client communication
 - [ ] Add support for encryption
+- [ ] Add support for multiple clients
 
 ## Description
 
