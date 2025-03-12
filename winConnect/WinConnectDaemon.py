@@ -1,6 +1,6 @@
 import win32pipe
 
-from winConnect.WinConnectBase import WinConnectBase, WinConnectErrors
+from winConnect.WinConnectBase import WinConnectBase
 from winConnect.utils import SimpleConvertor
 
 
@@ -34,11 +34,13 @@ class WinConnectDaemon(WinConnectBase):
         if not self._opened:
             self._open_pipe()
         win32pipe.ConnectNamedPipe(self._pipe, None)
-        self._client_connected = True
+        self._connected = True
 
     def read_pipe(self):
-        if not self._client_connected:
+        if not self._connected:
             self.wait_client()
         if not self._inited:
             self._init_session()
-        return self._parse_action(*self._read_message())
+        # if not self._read():
+        #     raise
+        return self._read()

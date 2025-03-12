@@ -1,28 +1,17 @@
 import json
-import pickle
 import struct
 import threading
 import zlib
-from enum import Enum
 from typing import Any
 
 import ormsgpack
+import pywintypes
 import win32file
 
+from winConnect.errors import WinConnectErrors, WinConnectClientError
+from winConnect import exceptions
 from winConnect.utils import SimpleConvertor
 
-
-class WinConnectErrors(Enum):
-    NO_ERROR = 0
-
-    INIT_FIRST = 10
-
-    UNKNOWN_DATA_TYPE = 30
-    UNKNOWN_COMMAND = 31
-    UNKNOWN_ACTION = 32
-
-    BAD_DATA = 50
-    BAD_VERSION = 51
 
 # header: len(data) in struct.pack via header_format
 # data: action:data
@@ -36,6 +25,8 @@ class WinConnectBase:
 
     read_max_buffer = SimpleConvertor.to_gb(4)  # Max size of buffer for message
 
+    ormsgpack_options = ormsgpack.OPT_NON_STR_KEYS | ormsgpack.OPT_NAIVE_UTC | ormsgpack.OPT_PASSTHROUGH_TUPLE # ormsgpack options
+
     def __init__(self, pipe_name: str):
         self.run = True
         self._version = 1
@@ -47,7 +38,7 @@ class WinConnectBase:
         self._header_size = struct.calcsize(self._header_format)  # bytes
         self._calc_body_max_size()
 
-        self._client_connected = False
+        self._connected = False
         self._inited = False
         self._session_encoding = self.init_encoding
 
@@ -61,14 +52,14 @@ class WinConnectBase:
         self._body_max_size = SimpleConvertor.struct_range(self._header_format)[1] - self._header_size
 
     def set_header_settings(self, fmt):
-        if self._client_connected:
-            raise WinConnectSessionAlreadyActiveError("Session is active. Can't change header settings")
+        if self._connected:
+            raise exceptions.WinConnectSessionAlreadyActiveException("Session is active. Can't change header settings")
         try:
             self._header_format = fmt
             self._header_size = struct.calcsize(fmt)
             self._calc_body_max_size()
         except struct.error as e:
-            raise WinConnectStructFormatError(f"Error in struct format. ({e})")
+            raise exceptions.WinConnectStructFormatException(f"Error in struct format. ({e})")
 
     @property
     def pipe_name(self):
@@ -76,20 +67,33 @@ class WinConnectBase:
 
     @property
     def encoding(self):
+        if not self._inited:
+            return self.init_encoding
         return self._session_encoding
+
+    @property
+    def __header_settings(self):
+        if not self._inited:
+            return self.init_header_format, struct.calcsize(self.init_header_format)
+        return self._header_format, self._header_size
+
+    @property
+    def closed(self):
+        return not self._connected
 
     def _open_pipe(self): ...
 
     def __pack_data(self, action, data) -> (bytes, bytes):
         data_type = "msg"
-        data = ormsgpack.packb(data, option=ormsgpack.OPT_NAIVE_UTC)
+        data = ormsgpack.packb(data, option=self.ormsgpack_options)
         compressed_data = zlib.compress(data)
-        return data_type.encode(self._session_encoding) +  b":" + action + b":" + compressed_data
+        return data_type.encode(self.encoding) +  b":" + action + b":" + compressed_data
 
     def __unpack_data(self, data: bytes) -> (str, Any):
         data_type, action_data = self.__parse_message(data)
         if data_type != b"msg":
-            raise ValueError('Is client using correct lib? Unknown data type')
+            self._send_error(WinConnectErrors.UNKNOWN_DATA_TYPE, f"Unknown data type '{data_type}'")
+            raise exceptions.WinConnectBadDataTypeException('Is client using correct lib? Unknown data type')
         action, data = self.__parse_message(action_data)
         decompressed_data = zlib.decompress(data)
         deserialized_data = ormsgpack.unpackb(decompressed_data)
@@ -101,41 +105,64 @@ class WinConnectBase:
 
     def _read_message(self) -> (str, Any):
         with self._lock:
-            _, header = win32file.ReadFile(self._pipe, self.header_size)
+            _hfmt, _hsize = self.__header_settings
+            try:
+                _, header = win32file.ReadFile(self._pipe, self._header_size)
+            except pywintypes.error as e:
+                if e.winerror == 109:
+                    exc = exceptions.WinConnectConnectionClosedException("Connection closed")
+                    exc.real_exc = e
+                    raise exc
+                raise e
             if not header:
                 return b""
-            if len(header) != self.header_size and self._inited:
-                raise ValueError('Header is too small')
-            message_size = struct.unpack(self.header_format, header)[0]
+            if len(header) != _hsize and self._inited:
+                self._send_error(WinConnectErrors.BAD_HEADER, f"Bad header size. Expected: {_hsize}, got: {len(header)}")
+                self.close()
+            message_size = struct.unpack(_hfmt, header)[0]
+            if message_size > self._body_max_size or message_size > self.read_max_buffer:
+                self._send_error(WinConnectErrors.BODY_TOO_BIG, f"Body is too big. Max size: {self._body_max_size}kb")
+                self.close()
+            if not self._connected:
+                return None, None
             _, data = win32file.ReadFile(self._pipe, message_size)
-            return self.__unpack_data(data)
+            unpacked_data = self.__unpack_data(data)
+            print("Received message:", *unpacked_data)
+            return unpacked_data
 
     def _send_message(self, action: str, data: Any):
+        action = action.encode(self.encoding)
         with self._lock:
-            data = self.__pack_data(action.encode(self.encoding), data)
-            message_size = len(data)
-            if message_size > self.read_max_buffer:
+            if self.closed:
+                raise exceptions.WinConnectSessionClosedException("Session is closed")
+            packed_data = self.__pack_data(action, data)
+            message_size = len(packed_data)
+            if message_size > self._body_max_size:
                 raise ValueError('Message is too big')
             # Если размер сообщения больше размера read_header_size, то ошибка
-            if message_size > 2 ** (8 * self.header_size):
+            if message_size > 2 ** (8 * self._header_size):
                 raise ValueError('Message is too big')
-            header = struct.pack(self.header_format, message_size)
-            print("Sending message:", header, data)
+            _hfmt, _ = self.__header_settings
+            header = struct.pack(_hfmt, message_size)
+            print("Sending message :", action, data)
             win32file.WriteFile(self._pipe, header)
-            win32file.WriteFile(self._pipe, data)
+            win32file.WriteFile(self._pipe, packed_data)
 
     def _send_error(self, error: WinConnectErrors, error_message: str = None):
         e = {"error": True, "code": error.value, "message": error.name, "description": error_message}
         self._send_message("error", e)
 
-    def _parse_action(self, action, data: bytes):
+    def _parse_action(self, action, data: Any) -> (bool, Any):
+        # return: (internal_command, data)
+        if not self._connected:
+            return
         match action:
             case b"command":
-                return self._parse_command(data)
+                return True, self._parse_command(data)
             case b"data":
-                return data
+                return False, data
             case b"error":
-                print(data)
+                return False, WinConnectClientError(data['code'], data['message'])
             case _:
                 return self._send_error(WinConnectErrors.UNKNOWN_ACTION, f"Unknown action '{action}'")
 
@@ -146,8 +173,8 @@ class WinConnectBase:
                 settings = {
                     'version': self._version,
                     'encoding': self.default_encoding,
-                    'header_size': self.header_size,
-                    'header_format': self.header_format,
+                    'header_size': self._header_size,
+                    'header_format': self._header_format,
                     'max_buffer': self.read_max_buffer
                 }
                 session_settings = f"set_session_settings:{json.dumps(settings)}".encode(self.init_encoding)
@@ -163,18 +190,23 @@ class WinConnectBase:
                     self._send_error(WinConnectErrors.BAD_VERSION, f"Version mismatch")
                     return self.close()
                 self._session_encoding = settings.get('encoding', self.default_encoding)
-                self.header_size = settings.get('header_size', self.header_size)
-                self.header_format = settings.get('header_format', self.header_format)
+                self._header_size = settings.get('header_size', self._header_size)
+                self._header_format = settings.get('header_format', self._header_format)
                 self.read_max_buffer = settings.get('max_buffer', self.read_max_buffer)
                 self._send_message("command", b"ready:")
                 return True
             case b"ready":
+                return True
+            case b"close":
+                self.close()
                 return True
             case _:
                 return self._send_error(WinConnectErrors.UNKNOWN_COMMAND, f"Command {command!r} is unknown")
 
     def _init_session(self):
         action, data = self._read_message()
+        if not self._connected:
+            return
         if action != b"command":
             return self._send_error(WinConnectErrors.BAD_DATA, "Unknown data type")
         if not self._parse_command(data):
@@ -184,13 +216,25 @@ class WinConnectBase:
     def send_data(self, data):
         self._send_message("data", data)
 
+    def _close_session(self): ...
+
     def close(self):
-        if self._opened:
+        self._close_session()
+        if self._connected:
             win32file.CloseHandle(self._pipe)
             self._opened = False
-            self._client_connected = False
+            self._connected = False
             self._inited = False
             self._pipe = None
+            print("session closed")
+
+    def _read(self) -> Any:
+        if self.closed:
+            return None
+        internal, data = self._parse_action(*self._read_message())
+        if internal:
+            return self._read()
+        return data
 
     def read_pipe(self):
         ...
