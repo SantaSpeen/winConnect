@@ -16,6 +16,7 @@ class WinConnectDaemon(WinConnectBase):
 
     def __init__(self, pipe_name: str):
         super().__init__(pipe_name)
+        self.run = True
 
     def _open_pipe(self):
         self._pipe = win32pipe.CreateNamedPipe(
@@ -29,12 +30,17 @@ class WinConnectDaemon(WinConnectBase):
             self.pipe_sa
         )
         self._opened = True
+        self._log.debug(f"[{self._pipe_name}] Pipe opened")
+
+    def _close_session(self):
+        self.run = False
 
     def wait_client(self):
         if not self._opened:
             self._open_pipe()
         win32pipe.ConnectNamedPipe(self._pipe, None)
         self._connected = True
+        self._log.debug(f"[{self._pipe_name}] Client connected")
 
     def read_pipe(self):
         if not self._connected:
@@ -44,3 +50,12 @@ class WinConnectDaemon(WinConnectBase):
         # if not self._read():
         #     raise
         return self._read()
+
+    def listen(self):
+        while self.run:
+            yield self.read_pipe()
+        self.stop()
+
+    def stop(self):
+        self.run = False
+        self.close()

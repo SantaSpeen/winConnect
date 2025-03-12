@@ -30,6 +30,7 @@ class WinConnectClient(WinConnectBase):
             )
             self._opened = True
             self._connected = True
+            self._log.debug(f"Pipe '{self._pipe_name}' opened")
         except pywintypes.error as e:
             if e.winerror == 2:
                 exc = WinConnectConnectionNoPipeException(f"Error while opening pipe: Pipe not found")
@@ -37,39 +38,34 @@ class WinConnectClient(WinConnectBase):
                 raise exc
             raise e
 
-    def _init(self):
-        self._send_message("command", b"get_session_settings:")
+    def _init(self, program_name="NoName"):
+        self._send_message("command", b"get_session_settings:" + program_name.encode(self.encoding))
         self._init_session()
-
-    def connect(self):
-        """Connect to server"""
-        self._open_pipe()
-        return self.init_session()
-
-    def init_session(self):
-        """Init session with server: get session settings"""
-        self._init()
-        return self
 
     def _close_session(self):
         """Send close command to server"""
         if not self.closed:
             self._send_message("command", b"close:")
 
-    def __enter__(self):
-        if not self._connected:
-            self.connect()
+    def __check_pipe(self):
+        if not self._opened:
+            self._open_pipe()
         if not self._inited:
-            self.init_session()
+            self._init()
+
+    def __enter__(self):
+        self.__check_pipe()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        # self._close_session()
         self.close()
 
+    def connect(self, program_name: str="NoName"):
+        """Connect to server and initialize session"""
+        self._open_pipe()
+        self._init(program_name)
+        return self
+
     def read_pipe(self):
-        if not self._connected:
-            self.connect()
-        if not self._inited:
-            self.init_session()
+        self.__check_pipe()
         return self._read()

@@ -1,4 +1,5 @@
 import json
+import logging
 import struct
 import threading
 import zlib
@@ -11,7 +12,6 @@ import win32file
 from winConnect.errors import WinConnectErrors, WinConnectClientError
 from winConnect import exceptions
 from winConnect.utils import SimpleConvertor
-
 
 # header: len(data) in struct.pack via header_format
 # data: action:data
@@ -28,7 +28,7 @@ class WinConnectBase:
     ormsgpack_options = ormsgpack.OPT_NON_STR_KEYS | ormsgpack.OPT_NAIVE_UTC | ormsgpack.OPT_PASSTHROUGH_TUPLE # ormsgpack options
 
     def __init__(self, pipe_name: str):
-        self.run = True
+        self._log = logging.getLogger(f"WinConnect:{pipe_name}")
         self._version = 1
         self._pipe_name = r'\\.\pipe\{}'.format(pipe_name)
         self._pipe = None
@@ -45,6 +45,9 @@ class WinConnectBase:
         self._parts_buffer = None  # Buffer for parts of message (If message is too big)
 
         self._lock = threading.Lock()
+
+    def set_logger(self, logger):
+        self._log = logger
 
     def _calc_body_max_size(self):
         # Max size of body: 2 ** (8 * header_size) - 1 - header_size - 1
@@ -126,9 +129,9 @@ class WinConnectBase:
             if not self._connected:
                 return None, None
             _, data = win32file.ReadFile(self._pipe, message_size)
-            unpacked_data = self.__unpack_data(data)
-            print("Received message:", *unpacked_data)
-            return unpacked_data
+            action, data = self.__unpack_data(data)
+            # self._log.debug(f"[{self._pipe_name}] Received message: {action=} {data=}")
+            return action, data
 
     def _send_message(self, action: str, data: Any):
         action = action.encode(self.encoding)
@@ -144,7 +147,7 @@ class WinConnectBase:
                 raise ValueError('Message is too big')
             _hfmt, _ = self.__header_settings
             header = struct.pack(_hfmt, message_size)
-            print("Sending message :", action, data)
+            # self._log.debug(f"[{self._pipe_name}] Sending message: {action=} {data=}")
             win32file.WriteFile(self._pipe, header)
             win32file.WriteFile(self._pipe, packed_data)
 
@@ -170,6 +173,7 @@ class WinConnectBase:
         command, data = self.__parse_message(data)
         match command:
             case b'get_session_settings':
+                self._log.debug(f"[{self._pipe_name}] Received get_session_settings from {data}")
                 settings = {
                     'version': self._version,
                     'encoding': self.default_encoding,
@@ -226,7 +230,7 @@ class WinConnectBase:
             self._connected = False
             self._inited = False
             self._pipe = None
-            print("session closed")
+            self._log.debug(f"[{self._pipe_name}] Session closed")
 
     def _read(self) -> Any:
         if self.closed:
@@ -238,13 +242,3 @@ class WinConnectBase:
 
     def read_pipe(self):
         ...
-
-    def listen(self):
-        while self.run:
-            yield self.read_pipe()
-        self.stop()
-
-    def stop(self):
-        self.run = False
-        with self._lock:
-            self.close()
