@@ -4,5 +4,5 @@ from .crypto_classes import (
     WinConnectCryptoNone,
     WinConnectCryptoSimple,
     WinConnectCryptoPassword,
-    WinConnectCryptoCert
+    # WinConnectCryptoCert
 )

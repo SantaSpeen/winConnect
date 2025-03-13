@@ -88,21 +88,21 @@ class WinConnectCryptoPassword(WinConnectCryptoBase):
         pad_len = decrypted[-1]  # Убираем PKCS7 padding
         return decrypted[:-pad_len]
 
-class WinConnectCryptoCert(WinConnectCryptoBase):
-    def __init__(self, cert_file: str):
-        if not _pip_crypto:
-            raise ImportError("Crypto library not installed. Install with 'pip install winConnect[crypto]'")
-        self.cert_file = Path(cert_file)
-
-    def _open_cert(self):
-        pass
-
-    def load(self) -> None:
-        self._open_cert()
-
-    def encrypt(self, data: bytes) -> bytes:
-        pass
-
-    def decrypt(self, data: bytes) -> bytes:
-        pass
-
+# class WinConnectCryptoCert(WinConnectCryptoBase):
+#     def __init__(self, cert_file: str):
+#         if not _pip_crypto:
+#             raise ImportError("Crypto library not installed. Install with 'pip install winConnect[crypto]'")
+#         self.cert_file = Path(cert_file)
+#
+#     def _open_cert(self):
+#         pass
+#
+#     def load(self) -> None:
+#         self._open_cert()
+#
+#     def encrypt(self, data: bytes) -> bytes:
+#         pass
+#
+#     def decrypt(self, data: bytes) -> bytes:
+#         pass
+#
