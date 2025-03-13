@@ -15,15 +15,26 @@ def test_crypto_class(crypto_class: "WinConnectCryptoBase"):
 class WinConnectCrypto:
 
     def __init__(self):
-        self.__crypto_class = None
+        self.__crypto_class: WinConnectCryptoBase = None
         self.__log_prefix = None
         self._log = logging.getLogger("WinConnectCrypto")
 
+    @property
+    def crypt_name(self) -> str:
+        return self.__crypto_class.__class__.__name__
+
+    @property
+    def crypt_salt(self) -> bytes:
+        return self.__crypto_class.salt
+
+    def set_salt(self, salt: bytes):
+        self.__crypto_class.salt = salt
+
     def set_crypto_class(self, crypto_class: "WinConnectCryptoBase"):
-        self._log.debug(f"{self.__log_prefix}Updating crypto class. {self.get_info()} -> {crypto_class.__class__.__name__}")
+        self._log.debug(f"{self.__log_prefix}Updating crypto class. {self.crypt_name} -> {crypto_class.__class__.__name__}")
         test_crypto_class(crypto_class)
         self.__crypto_class = crypto_class
-        self.__log_prefix = f"[{self.get_info()}] "
+        self.__log_prefix = f"[{self.crypt_name}] "
         self._log.debug(f"{self.__log_prefix}Crypto class updated.")
 
     def set_logger(self, logger):
@@ -37,9 +48,6 @@ class WinConnectCrypto:
         self.__crypto_class.load()
         self._log.debug(f"{self.__log_prefix}Crypto class loaded")
         return True
-
-    def get_info(self):
-        return self.__crypto_class.__class__.__name__
 
     def encrypt(self, data: bytes) -> bytes:
         return self.__crypto_class.encrypt(data)

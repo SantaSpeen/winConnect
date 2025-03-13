@@ -39,13 +39,13 @@ class WinConnectClient(WinConnectBase):
             raise e
 
     def _init(self, program_name="NoName"):
-        self._send_message("command", b"get_session_settings:" + program_name.encode(self.encoding))
+        self._send_message("cmd", b"get_session_settings:" + program_name.encode(self.encoding))
         self._init_session()
 
     def _close_session(self):
         """Send close command to server"""
         if not self.closed:
-            self._send_message("command", b"close:")
+            self._send_message("cmd", b"close:")
 
     def __check_pipe(self):
         if not self._opened:

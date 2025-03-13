@@ -3,6 +3,6 @@ from .crypto_classes import (
     WinConnectCryptoBase,
     WinConnectCryptoNone,
     WinConnectCryptoSimple,
-    # WinConnectCryptoPassword,
+    WinConnectCryptoPassword,
     # WinConnectCryptoCert
 )

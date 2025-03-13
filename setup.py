@@ -13,10 +13,17 @@ packages = [_name, ]
 package_dir = {_name: _name}
 lib_path = here / _name
 
-requires = [
-    "pywin32==309",
-    "ormsgpack==1.8.0"
-]
+requires = {
+    "install_requires": [
+        "pywin32==309",
+        "ormsgpack==1.8.0"
+    ],
+    "extra_packages": {
+        "crypto": [
+            "pycryptodome==3.21.0"
+        ]
+    }
+}
 
 # 'setup.py publish' shortcut.
 if sys.argv[-1] == 'publish':
@@ -44,12 +51,13 @@ setup(
     package_data={'': ['LICENSE']},
     package_dir=package_dir,
     include_package_data=True,
-    install_requires=requires,
+    **requires,
     license=about['__license__'],
     classifiers=[
-        "Development Status :: 3 - Alpha",
+        "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Developers",
-        "Natural Language :: Russian",
+        "Topic :: Software Development :: Libraries",
+        "Natural Language :: English",
         "Programming Language :: Python :: 3 :: Only",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.10",
