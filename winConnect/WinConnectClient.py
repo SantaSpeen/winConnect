@@ -1,8 +1,8 @@
 import pywintypes
 import win32file
 
-from winConnect.WinConnectBase import WinConnectBase
-from winConnect.exceptions import WinConnectConnectionNoPipeException
+from .WinConnectBase import WinConnectBase
+from .exceptions import WinConnectConnectionNoPipeException
 
 
 class WinConnectClient(WinConnectBase):
@@ -30,7 +30,7 @@ class WinConnectClient(WinConnectBase):
             )
             self._opened = True
             self._connected = True
-            self._log.debug(f"Pipe '{self._pipe_name}' opened")
+            self._log.debug(f"[{self._pipe_name}] Pipe opened")
         except pywintypes.error as e:
             if e.winerror == 2:
                 exc = WinConnectConnectionNoPipeException(f"Error while opening pipe: Pipe not found")
