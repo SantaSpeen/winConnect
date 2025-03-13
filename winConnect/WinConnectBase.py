@@ -208,17 +208,20 @@ class WinConnectBase:
     def __read_chunked_message(self, data_info: bytes):
         self._log.debug(f"[{self._pipe_name}] Receive long message. Reading in chunks...")
         chunk_size = self._body_max_size - 32
-        sha256, data_len = data_info[:32], int(data_info[32:])
-        if data_len > self.read_max_buffer:
+        cdata_sha256, cdata_len = data_info[:32], int(data_info[32:])
+        if cdata_len > self.read_max_buffer:
             self._send_error(WinConnectErrors.BODY_TOO_BIG, f"Body is too big. Max size: {self.read_max_buffer}kb")
             self.close()
         _buffer = b""
 
         with self._read_lock:
-            for i in range(0, data_len, chunk_size):
+            for i in range(0, cdata_len, chunk_size):
                 _buffer += self.__read_and_decrypt(chunk_size)
 
-        return _buffer
+        if cdata_sha256 != hashlib.sha256(_buffer).digest():
+            self._send_error(WinConnectErrors.BAD_DATA, f"Data is corrupted")
+
+        return zlib.decompress(_buffer)
 
     def __send_chunked_message(self, data: bytes):
         self._log.debug(f"[{self._pipe_name}] Long message. Sending in chunks...")
@@ -276,9 +279,12 @@ class WinConnectBase:
                 return True
             case b'set_session_settings':
                 self._log.debug(f"[{self._pipe_name}] Received session settings.")
-                len_salt, data = self.__parse_message(data)
+                len_salt, data_salt = self.__parse_message(data)
                 len_salt = int(len_salt)
-                data, salt = data[:-len_salt], data[-len_salt:]
+                if len_salt > 0:
+                    data, salt = data_salt[:-len_salt], data_salt[-len_salt:]
+                else:
+                    data, salt = data_salt, b''
 
                 if salt != self.__crypto.crypt_salt:
                     self._log.debug(f"[{self._pipe_name}] Updating salt")
