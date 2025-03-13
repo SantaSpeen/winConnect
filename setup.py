@@ -47,9 +47,10 @@ setup(
     install_requires=requires,
     license=about['__license__'],
     classifiers=[
-        "Development Status :: 3 - Alpha",
+        "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Developers",
-        "Natural Language :: Russian",
+        "Topic :: Software Development :: Libraries",
+        "Natural Language :: English",
         "Programming Language :: Python :: 3 :: Only",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.10",
