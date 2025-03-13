@@ -25,7 +25,7 @@ class WinConnectBase:
 
     default_encoding = 'utf-8'
 
-    read_max_buffer = SimpleConvertor.to_gb(3)-1  # Max size via chunked messages
+    read_max_buffer = SimpleConvertor.to_gb(3)-32  # Max size via chunked messages
 
     ormsgpack_options = ormsgpack.OPT_NON_STR_KEYS | ormsgpack.OPT_NAIVE_UTC | ormsgpack.OPT_PASSTHROUGH_TUPLE # ormsgpack options
 
@@ -33,8 +33,9 @@ class WinConnectBase:
         self._log = logging.getLogger(f"WinConnect:{pipe_name}")
         # _version:
         # 1 - 0.9.1
-        # 2 - 0.9.2+ (with crypto)
-        self._version = 2
+        # 2 - 0.9.2 (with crypto)
+        # 3 - 0.9.3+ (with crypto+salt)
+        self._version = 3
         self._pipe_name = r'\\.\pipe\{}'.format(pipe_name)
         self._pipe = None
         self._opened = False
@@ -191,35 +192,46 @@ class WinConnectBase:
                 return self._send_error(WinConnectErrors.UNKNOWN_ACTION, f"Unknown action '{action}'")
 
     def _parse_command(self, data: bytes):
+        _blank_settings = {
+            'version': self._version,
+            'encoding': self.default_encoding,
+            'header_size': self._header_size,
+            'header_format': self._header_format,
+            'max_buffer': self.read_max_buffer,
+            'crypto': self.__crypto.crypt_name,
+            'salt': self.__crypto.crypt_salt
+        }
         command, data = self.__parse_message(data)
         match command:
             case b'get_session_settings':
                 self._log.debug(f"[{self._pipe_name}] Received get_session_settings from {data}")
-                settings = {
-                    'version': self._version,
-                    'encoding': self.default_encoding,
-                    'header_size': self._header_size,
-                    'header_format': self._header_format,
-                    'max_buffer': self.read_max_buffer,
-                    "crypto": self.__crypto.get_info()
-                }
-                session_settings = f"set_session_settings:{json.dumps(settings)}".encode(self.init_encoding)
+                session_settings = f"set_session_settings:{json.dumps(_blank_settings)}".encode(self.encoding)
                 self._send_message("command", session_settings)
                 return True
             case b'set_session_settings':
+                self._log.debug(f"[{self._pipe_name}] Received session settings.")
                 try:
                     settings = json.loads(data.decode(self.init_encoding))
                 except json.JSONDecodeError as e:
                     self._send_error(WinConnectErrors.BAD_DATA, f"JSONDecodeError: {e}")
                     return self.close()
-                if settings.get('version') != self._version:
+
+                if _blank_settings.keys() != settings.keys():
+                    self._log.error(f"{WinConnectErrors.BAD_SETTINGS}")
+                    self._send_error(WinConnectErrors.BAD_SETTINGS, f"Setting have wrong structure")
+                    return self.close()
+
+                if settings['version'] != self._version:
                     self._log.error(f"{WinConnectErrors.BAD_VERSION}")
                     self._send_error(WinConnectErrors.BAD_VERSION, f"Version mismatch")
                     return self.close()
-                if settings.get('crypto') != self.__crypto.get_info():
+                if settings['crypto'] != self.__crypto.crypt_name:
                     self._log.error(f"{WinConnectErrors.BAD_CRYPTO}")
                     self._send_error(WinConnectErrors.BAD_CRYPTO, f"Crypto mismatch")
                     return self.close()
+                if settings['salt'] != self.__crypto.crypt_salt:
+                    self._log.debug(f"[{self._pipe_name}] Updating salt")
+                    self.__crypto.set_salt(settings['salt'])
                 self._session_encoding = settings.get('encoding', self.default_encoding)
                 self._header_size = settings.get('header_size', self._header_size)
                 self._header_format = settings.get('header_format', self._header_format)

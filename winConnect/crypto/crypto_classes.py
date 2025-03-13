@@ -1,7 +1,17 @@
+import os
 import random
+from pathlib import Path
 
 from .crypto_class_base import WinConnectCryptoBase
 from winConnect.exceptions import WinConnectCryptoSimpleBadHeaderException
+
+_pip_crypto = True
+try:
+    from Crypto.Cipher import AES
+    from Crypto.Protocol.KDF import PBKDF2
+    from Crypto.Cipher import PKCS1_OAEP
+except ImportError:
+    _pip_crypto = False
 
 
 class WinConnectCryptoNone(WinConnectCryptoBase):
@@ -19,12 +29,10 @@ class WinConnectCryptoSimple(WinConnectCryptoBase):
         shift_key = random.randint(100, 749)
         key = random.randint(5, 250)
         encrypted_text = bytearray()
-        header = f"wccs{shift_key}{key+shift_key}:"
-        for char in header:
-            encrypted_text.append(ord(char))
+        header = f"wccs{shift_key}{key+shift_key}:".encode()
         for char in data:
             encrypted_text.append(char ^ key)
-        return bytes(encrypted_text)
+        return header + bytes(encrypted_text)
 
     def decrypt(self, data: bytes) -> bytes:
         try:
@@ -44,17 +52,49 @@ class WinConnectCryptoSimple(WinConnectCryptoBase):
 class WinConnectCryptoPassword(WinConnectCryptoBase):
 
     def __init__(self, password: str):
-        pass
+        if not _pip_crypto:
+            raise ImportError("Crypto library not installed. Install with 'pip install winConnect[crypto]'")
+        self.password = password
+        self.__salt = os.urandom(16)
+        self.__key = PBKDF2(password, self.__salt, dkLen=32, count=100000)
+
+    @property
+    def salt(self):
+        return self.__salt
+
+    @salt.setter
+    def salt(self, value):
+        self.__salt = value
+        self.__key = PBKDF2(self.password, self.__salt, dkLen=32, count=100000)
 
     def encrypt(self, data: bytes) -> bytes:
-        pass
+        iv = os.urandom(16)  # Генерируем IV
+        cipher = AES.new(self.__key, AES.MODE_CBC, iv)
+        pad_len = 16 - len(data) % 16
+        data += chr(pad_len) * pad_len
+
+        header = f"wccp{iv.hex()}:".encode()
+
+        return header + cipher.encrypt(data)  # Шифруем
 
     def decrypt(self, data: bytes) -> bytes:
-        pass
+        try:
+            header, iv, content = data[:4], data[4:20], data[20:]
+            if header[:4] != b"wccp":
+                raise WinConnectCryptoSimpleBadHeaderException("Bad header in message.")
+        except ValueError:
+            raise WinConnectCryptoSimpleBadHeaderException("No header in message.")
+
+        cipher = AES.new(self.__key, AES.MODE_CBC, iv)
+        decrypted = cipher.decrypt(data)
+        pad_len = decrypted[-1]  # Убираем PKCS7 padding
+        return decrypted[:-pad_len]
 
 class WinConnectCryptoCert(WinConnectCryptoBase):
     def __init__(self, cert_file: str):
-        pass
+        if not _pip_crypto:
+            raise ImportError("Crypto library not installed. Install with 'pip install winConnect[crypto]'")
+        self.cert_file = Path(cert_file)
 
     def _open_cert(self):
         pass

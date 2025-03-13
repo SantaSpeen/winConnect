@@ -1,5 +1,11 @@
 class WinConnectCryptoBase:
 
+    @property
+    def salt(self) -> bytes:
+        return b""
+    @salt.setter
+    def salt(self, value): ...
+
     def encrypt(self, data: bytes) -> bytes: ...
     def decrypt(self, data: bytes) -> bytes: ...
 
