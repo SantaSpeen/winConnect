@@ -40,3 +40,31 @@ class WinConnectCryptoSimple(WinConnectCryptoBase):
             decrypted_text.append(char ^ key)
         return bytes(decrypted_text)
 
+
+class WinConnectCryptoPassword(WinConnectCryptoBase):
+
+    def __init__(self, password: str):
+        pass
+
+    def encrypt(self, data: bytes) -> bytes:
+        pass
+
+    def decrypt(self, data: bytes) -> bytes:
+        pass
+
+class WinConnectCryptoCert(WinConnectCryptoBase):
+    def __init__(self, cert_file: str):
+        pass
+
+    def _open_cert(self):
+        pass
+
+    def load(self) -> None:
+        self._open_cert()
+
+    def encrypt(self, data: bytes) -> bytes:
+        pass
+
+    def decrypt(self, data: bytes) -> bytes:
+        pass
+
