@@ -1,11 +1,18 @@
+import sys
+
+from loguru import logger
+
 from winConnect import WinConnectDaemon
+from winConnect import crypto
+
+logger.remove()
+logger.add(sys.stdout, level="DEBUG")
+
+crypt_mode = crypto.WinConnectCryptoSimple()
 
 connector = WinConnectDaemon('test')
-# Set header settings
-# see: https://docs.python.org/3.13/library/struct.html#format-characters
-# Default: ">L"
-# >L - Big-endian long integer (header_size: 4 bytes, max_size: 4294967295)
-connector.set_header_settings(">L")
+connector.set_logger(logger)
+connector.set_crypto(crypt_mode)
 
 for data in connector.listen():
     print(f"({type(data)}) {data=}")

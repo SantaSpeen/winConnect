@@ -1,16 +1,14 @@
 import win32pipe
 
-from winConnect.WinConnectBase import WinConnectBase
-from winConnect.utils import SimpleConvertor
+from .WinConnectBase import WinConnectBase
+from .crypto import WinConnectCrypto
 
 
 class WinConnectDaemon(WinConnectBase):
     # see: https://mhammond.github.io/pywin32/win32pipe__CreateNamedPipe_meth.html
     pipe_openMode = win32pipe.PIPE_ACCESS_DUPLEX  # Open mode (read/write)
     pipe_pipeMode = win32pipe.PIPE_TYPE_MESSAGE | win32pipe.PIPE_READMODE_MESSAGE | win32pipe.PIPE_WAIT  # Pipe mode (message type, message read mode, blocking mode)
-    pipe_nMaxInstances = 2  # Max number of instances
-    pipe_nOutBufferSize = SimpleConvertor.to_kb(64)  # Max size of output buffer
-    pipe_nInBufferSize = SimpleConvertor.to_kb(64)  # Max size of input buffer
+    pipe_nMaxInstances = 1  # Max number of instances
     pipe_nDefaultTimeOut = 0  # ~ ms
     pipe_sa = None  # Security attributes
 
@@ -19,13 +17,17 @@ class WinConnectDaemon(WinConnectBase):
         self.run = True
 
     def _open_pipe(self):
+        pipe_nOutBufferSize, pipe_nInBufferSize = self._body_max_size+20, self._body_max_size+20
+        self._log.debug(f"[{self._pipe_name}] Creating pipe. "
+                        f"Settings: {self.pipe_openMode=}, {self.pipe_pipeMode=}, {self.pipe_nMaxInstances=}, "
+                        f"{pipe_nOutBufferSize=}, {pipe_nInBufferSize=}, {self.pipe_nDefaultTimeOut=}, {self.pipe_sa=}")
         self._pipe = win32pipe.CreateNamedPipe(
             self._pipe_name,
             self.pipe_openMode,
             self.pipe_pipeMode,
             self.pipe_nMaxInstances,
-            self.pipe_nOutBufferSize,
-            self.pipe_nInBufferSize,
+            pipe_nOutBufferSize,
+            pipe_nInBufferSize,
             self.pipe_nDefaultTimeOut,
             self.pipe_sa
         )

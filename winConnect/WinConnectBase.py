@@ -9,9 +9,11 @@ import ormsgpack
 import pywintypes
 import win32file
 
-from winConnect.errors import WinConnectErrors, WinConnectClientError
-from winConnect import exceptions
-from winConnect.utils import SimpleConvertor
+from .crypto.WinConnectCrypto import WinConnectCrypto
+from .crypto.crypto_classes import WinConnectCryptoNone
+from .errors import WinConnectErrors, WinConnectError
+from . import exceptions
+from .utils import SimpleConvertor
 
 # header: len(data) in struct.pack via header_format
 # data: action:data
@@ -19,17 +21,20 @@ from winConnect.utils import SimpleConvertor
 
 class WinConnectBase:
     init_encoding = 'utf-8'
-    init_header_format = ">L"  # Format for reading header (big-endian, unsigned long; 4 bytes)
+    init_header_format = ">H"  # Format for reading header (big-endian, unsigned long; 4 bytes)
 
     default_encoding = 'utf-8'
 
-    read_max_buffer = SimpleConvertor.to_gb(4)  # Max size of buffer for message
+    read_max_buffer = SimpleConvertor.to_gb(3)-1  # Max size via chunked messages
 
     ormsgpack_options = ormsgpack.OPT_NON_STR_KEYS | ormsgpack.OPT_NAIVE_UTC | ormsgpack.OPT_PASSTHROUGH_TUPLE # ormsgpack options
 
     def __init__(self, pipe_name: str):
         self._log = logging.getLogger(f"WinConnect:{pipe_name}")
-        self._version = 1
+        # _version:
+        # 1 - 0.9.1
+        # 2 - 0.9.2+ (with crypto)
+        self._version = 2
         self._pipe_name = r'\\.\pipe\{}'.format(pipe_name)
         self._pipe = None
         self._opened = False
@@ -42,12 +47,24 @@ class WinConnectBase:
         self._inited = False
         self._session_encoding = self.init_encoding
 
-        self._parts_buffer = None  # Buffer for parts of message (If message is too big)
+        self.__crypto = WinConnectCrypto()
+        self.__crypto.set_crypto_class(WinConnectCryptoNone())
+
+        # self._chunks = []
 
         self._lock = threading.Lock()
 
+    def set_crypto(self, crypto):
+        if self._connected:
+            raise exceptions.WinConnectConnectionAlreadyOpenException("Can't change crypto while session is active")
+        self.__crypto.set_crypto_class(crypto)
+        if not self.__crypto.test_and_load():
+            raise exceptions.WinConnectCryptoException("Crypto failed test")
+
     def set_logger(self, logger):
+        logger.debug(f"[{self._pipe_name}] Update logger")
         self._log = logger
+        self.__crypto.set_logger(logger)
 
     def _calc_body_max_size(self):
         # Max size of body: 2 ** (8 * header_size) - 1 - header_size - 1
@@ -129,8 +146,10 @@ class WinConnectBase:
             if not self._connected:
                 return None, None
             _, data = win32file.ReadFile(self._pipe, message_size)
+            if self._inited:
+                data = self.__crypto.decrypt(data)
             action, data = self.__unpack_data(data)
-            # self._log.debug(f"[{self._pipe_name}] Received message: {action=} {data=}")
+            self._log.debug(f"[{self._pipe_name}] Received message: {action=} {data=}")
             return action, data
 
     def _send_message(self, action: str, data: Any):
@@ -139,6 +158,8 @@ class WinConnectBase:
             if self.closed:
                 raise exceptions.WinConnectSessionClosedException("Session is closed")
             packed_data = self.__pack_data(action, data)
+            if self._inited:
+                packed_data = self.__crypto.encrypt(packed_data)
             message_size = len(packed_data)
             if message_size > self._body_max_size:
                 raise ValueError('Message is too big')
@@ -147,9 +168,9 @@ class WinConnectBase:
                 raise ValueError('Message is too big')
             _hfmt, _ = self.__header_settings
             header = struct.pack(_hfmt, message_size)
-            # self._log.debug(f"[{self._pipe_name}] Sending message: {action=} {data=}")
-            win32file.WriteFile(self._pipe, header)
-            win32file.WriteFile(self._pipe, packed_data)
+            packet = header + packed_data
+            self._log.debug(f"[{self._pipe_name}] Sending message: {action=} {data=}; {packet=}")
+            win32file.WriteFile(self._pipe, packet)
 
     def _send_error(self, error: WinConnectErrors, error_message: str = None):
         e = {"error": True, "code": error.value, "message": error.name, "description": error_message}
@@ -165,7 +186,7 @@ class WinConnectBase:
             case b"data":
                 return False, data
             case b"error":
-                return False, WinConnectClientError(data['code'], data['message'])
+                return False, WinConnectError(data['code'], data['message'])
             case _:
                 return self._send_error(WinConnectErrors.UNKNOWN_ACTION, f"Unknown action '{action}'")
 
@@ -179,7 +200,8 @@ class WinConnectBase:
                     'encoding': self.default_encoding,
                     'header_size': self._header_size,
                     'header_format': self._header_format,
-                    'max_buffer': self.read_max_buffer
+                    'max_buffer': self.read_max_buffer,
+                    "crypto": self.__crypto.get_info()
                 }
                 session_settings = f"set_session_settings:{json.dumps(settings)}".encode(self.init_encoding)
                 self._send_message("command", session_settings)
@@ -191,15 +213,20 @@ class WinConnectBase:
                     self._send_error(WinConnectErrors.BAD_DATA, f"JSONDecodeError: {e}")
                     return self.close()
                 if settings.get('version') != self._version:
+                    self._log.error(f"{WinConnectErrors.BAD_VERSION}")
                     self._send_error(WinConnectErrors.BAD_VERSION, f"Version mismatch")
+                    return self.close()
+                if settings.get('crypto') != self.__crypto.get_info():
+                    self._log.error(f"{WinConnectErrors.BAD_CRYPTO}")
+                    self._send_error(WinConnectErrors.BAD_CRYPTO, f"Crypto mismatch")
                     return self.close()
                 self._session_encoding = settings.get('encoding', self.default_encoding)
                 self._header_size = settings.get('header_size', self._header_size)
                 self._header_format = settings.get('header_format', self._header_format)
                 self.read_max_buffer = settings.get('max_buffer', self.read_max_buffer)
-                self._send_message("command", b"ready:")
                 return True
-            case b"ready":
+            case b"session_ready":
+                self._inited = True
                 return True
             case b"close":
                 self.close()
@@ -215,7 +242,8 @@ class WinConnectBase:
             return self._send_error(WinConnectErrors.BAD_DATA, "Unknown data type")
         if not self._parse_command(data):
             return self._send_error(WinConnectErrors.INIT_FIRST, "Server need to init session first")
-        self._inited = True
+        self._send_message("command", b"session_ready:")
+        self._parse_action(*self._read_message())
 
     def send_data(self, data):
         self._send_message("data", data)
