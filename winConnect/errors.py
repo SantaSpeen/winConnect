@@ -14,11 +14,13 @@ class WinConnectErrors(Enum):
     BAD_DATA = 50
     BAD_VERSION = 51
     BAD_HEADER = 52
+    BAD_BODY = 53
+    BAD_CRYPTO = 54
 
     BODY_TOO_BIG = 60
 
 
 @dataclass
-class WinConnectClientError:
+class WinConnectError:
     code: WinConnectErrors
     message: str
