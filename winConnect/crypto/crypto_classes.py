@@ -38,7 +38,7 @@ class WinConnectCryptoSimple(WinConnectCryptoBase):
         try:
             header, content = data.split(b":", 1)
             if header[:4] != b"wccs":
-                raise WinConnectCryptoSimpleBadHeaderException("Bad header in message.")
+                raise WinConnectCryptoSimpleBadHeaderException(f"Bad header in message: {header[:4].decode()}")
         except ValueError:
             raise WinConnectCryptoSimpleBadHeaderException("No header in message.")
         shift_key = int(header[4:7])
@@ -69,24 +69,22 @@ class WinConnectCryptoPassword(WinConnectCryptoBase):
 
     def encrypt(self, data: bytes) -> bytes:
         iv = os.urandom(16)  # Генерируем IV
+        header = b"wccp" + iv
         cipher = AES.new(self.__key, AES.MODE_CBC, iv)
         pad_len = 16 - len(data) % 16
-        data += chr(pad_len) * pad_len
-
-        header = f"wccp{iv.hex()}:".encode()
-
-        return header + cipher.encrypt(data)  # Шифруем
+        padded_data = data + bytes([pad_len] * pad_len)
+        return header + cipher.encrypt(padded_data)  # Шифруем
 
     def decrypt(self, data: bytes) -> bytes:
         try:
             header, iv, content = data[:4], data[4:20], data[20:]
             if header[:4] != b"wccp":
-                raise WinConnectCryptoSimpleBadHeaderException("Bad header in message.")
+                raise WinConnectCryptoSimpleBadHeaderException(f"Bad header in message: {header.decode()}")
         except ValueError:
             raise WinConnectCryptoSimpleBadHeaderException("No header in message.")
 
         cipher = AES.new(self.__key, AES.MODE_CBC, iv)
-        decrypted = cipher.decrypt(data)
+        decrypted = cipher.decrypt(content)
         pad_len = decrypted[-1]  # Убираем PKCS7 padding
         return decrypted[:-pad_len]
 

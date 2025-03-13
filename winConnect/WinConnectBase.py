@@ -31,7 +31,7 @@ class WinConnectBase:
 
     def __init__(self, pipe_name: str):
         self._log = logging.getLogger(f"WinConnect:{pipe_name}")
-        # _version:
+        # versions:
         # 1 - 0.9.1
         # 2 - 0.9.2 (with crypto)
         # 3 - 0.9.3+ (with crypto+salt)
@@ -193,23 +193,36 @@ class WinConnectBase:
 
     def _parse_command(self, data: bytes):
         _blank_settings = {
-            'version': self._version,
-            'encoding': self.default_encoding,
-            'header_size': self._header_size,
-            'header_format': self._header_format,
-            'max_buffer': self.read_max_buffer,
-            'crypto': self.__crypto.crypt_name,
-            'salt': self.__crypto.crypt_salt
+            'version': None,
+            'encoding': None,
+            'header_size': None,
+            'header_format': None,
+            'max_buffer': None,
+            'crypto': None
         }
         command, data = self.__parse_message(data)
         match command:
             case b'get_session_settings':
                 self._log.debug(f"[{self._pipe_name}] Received get_session_settings from {data}")
-                session_settings = f"set_session_settings:{json.dumps(_blank_settings)}".encode(self.encoding)
+                _blank_settings['version'] = self._version
+                _blank_settings['encoding'] = self._session_encoding
+                _blank_settings['header_size'] = self._header_size
+                _blank_settings['header_format'] = self._header_format
+                _blank_settings['max_buffer'] = self.read_max_buffer
+                _blank_settings['crypto'] = self.__crypto.crypt_name
+                session_settings = f"set_session_settings:{len(self.__crypto.crypt_salt)}:{json.dumps(_blank_settings)}".encode(self.encoding) + self.__crypto.crypt_salt
                 self._send_message("command", session_settings)
                 return True
             case b'set_session_settings':
                 self._log.debug(f"[{self._pipe_name}] Received session settings.")
+                len_salt, data = self.__parse_message(data)
+                len_salt = int(len_salt)
+                data, salt = data[:-len_salt], data[-len_salt:]
+
+                if salt != self.__crypto.crypt_salt:
+                    self._log.debug(f"[{self._pipe_name}] Updating salt")
+                    self.__crypto.set_salt(salt)
+
                 try:
                     settings = json.loads(data.decode(self.init_encoding))
                 except json.JSONDecodeError as e:
@@ -229,9 +242,6 @@ class WinConnectBase:
                     self._log.error(f"{WinConnectErrors.BAD_CRYPTO}")
                     self._send_error(WinConnectErrors.BAD_CRYPTO, f"Crypto mismatch")
                     return self.close()
-                if settings['salt'] != self.__crypto.crypt_salt:
-                    self._log.debug(f"[{self._pipe_name}] Updating salt")
-                    self.__crypto.set_salt(settings['salt'])
                 self._session_encoding = settings.get('encoding', self.default_encoding)
                 self._header_size = settings.get('header_size', self._header_size)
                 self._header_format = settings.get('header_format', self._header_format)
