@@ -1,15 +1,15 @@
-# winConnect (Windows Only)
+# winConnect
 Communicate Client-Server via Windows NamedPipe
 
 ## ToDo:
 
-- [x] Add support for sending and receiving data
-- [x] Add support for other header settings
-- [x] Add support for safe closing
-- [x] Add logging
-- [ ] Send data in chunks (if data is too large)
-- [x] Add support for encryption
-  - [x] simple (via char xor; and auto-pairing)
+- [x] Add support for sending and receiving data (0.1.0)
+- [x] Add support for safe closing (0.9.0)
+- [x] Add support for other header settings (0.9.0)
+- [x] Add logging (0.9.1)
+- [ ] Send data in chunks (if data is too large) (0.9.3)
+- [x] Add support for encryption (0.9.2)
+  - [x] simple (via char xor'ing; auto-pairing)
   - [ ] password (via AES and PBKDF2)
   - [ ] certificate  (via RSA)
 - [ ] Add support for multiple clients
