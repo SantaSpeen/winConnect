@@ -1,5 +1,5 @@
-from .WinConnectDaemon import WinConnectDaemon
-from .WinConnectClient import WinConnectClient
+from .connectors import named_pipe
+from .connectors import socket
 
 from . import crypto
 
