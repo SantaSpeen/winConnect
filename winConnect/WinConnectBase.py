@@ -1,5 +1,5 @@
 import hashlib
-import json
+import orjson
 import logging
 import struct
 import threading
@@ -274,7 +274,7 @@ class WinConnectBase:
                 _blank_settings['header_format'] = self._header_format
                 _blank_settings['max_buffer'] = self.read_max_buffer
                 _blank_settings['crypto'] = self.__crypto.crypt_name
-                session_settings = f"set_session_settings:{len(self.__crypto.crypt_salt)}:{json.dumps(_blank_settings)}".encode(self.encoding) + self.__crypto.crypt_salt
+                session_settings = f"set_session_settings:{len(self.__crypto.crypt_salt)}:{orjson.dumps(_blank_settings)}".encode(self.encoding) + self.__crypto.crypt_salt
                 self._send_message("cmd", session_settings)
                 return True
             case b'set_session_settings':
@@ -291,8 +291,8 @@ class WinConnectBase:
                     self.__crypto.set_salt(salt)
 
                 try:
-                    settings = json.loads(data.decode(self.init_encoding))
-                except json.JSONDecodeError as e:
+                    settings = orjson.loads(data.decode(self.init_encoding))
+                except orjson.JSONDecodeError as e:
                     self._send_error(WinConnectErrors.BAD_DATA, f"JSONDecodeError: {e}")
                     return self.close()
 
