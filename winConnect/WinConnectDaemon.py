@@ -1,7 +1,6 @@
 import win32pipe
 
 from .WinConnectBase import WinConnectBase
-from .crypto import WinConnectCrypto
 
 
 class WinConnectDaemon(WinConnectBase):

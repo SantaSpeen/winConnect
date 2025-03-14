@@ -1,9 +1,8 @@
 import os
 import random
-from pathlib import Path
 
-from .crypto_class_base import WinConnectCryptoBase
 from winConnect.exceptions import WinConnectCryptoSimpleBadHeaderException
+from .crypto_class_base import WinConnectCryptoBase
 
 _pip_crypto = True
 try:
