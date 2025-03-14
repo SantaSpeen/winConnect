@@ -10,11 +10,11 @@ import ormsgpack
 import pywintypes
 import win32file
 
-from .crypto.WinConnectCrypto import WinConnectCrypto
-from .crypto.crypto_classes import WinConnectCryptoNone
-from .errors import WinConnectErrors, WinConnectError
-from . import exceptions
-from .utils import SimpleConvertor
+from winConnect.crypto.WinConnectCrypto import WinConnectCrypto
+from winConnect.crypto.crypto_classes import WinConnectCryptoNone
+from winConnect.errors import WinConnectErrors, WinConnectError
+from winConnect import exceptions
+from winConnect.utils import SimpleConvertor
 
 # header: len(data) in struct.pack via header_format
 # data: action:data
@@ -49,8 +49,8 @@ class WinConnectBase:
         self._inited = False
         self._session_encoding = self.init_encoding
 
-        self.__crypto = WinConnectCrypto()
-        self.__crypto.set_crypto_class(WinConnectCryptoNone())
+        self._crypto = WinConnectCrypto()
+        self._crypto.set_crypto_class(WinConnectCryptoNone())
 
         self._pipe_lock = threading.Lock()
         self._read_lock = threading.Lock()
@@ -59,14 +59,14 @@ class WinConnectBase:
     def set_crypto(self, crypto):
         if self._connected:
             raise exceptions.WinConnectConnectionAlreadyOpenException("Can't change crypto while session is active")
-        self.__crypto.set_crypto_class(crypto)
-        if not self.__crypto.test_and_load():
+        self._crypto.set_crypto_class(crypto)
+        if not self._crypto.test_and_load():
             raise exceptions.WinConnectCryptoException("Crypto failed test")
 
     def set_logger(self, logger):
         logger.debug(f"[{self._pipe_name}] Update logger")
         self._log = logger
-        self.__crypto.set_logger(logger)
+        self._crypto.set_logger(logger)
 
     def _calc_body_max_size(self):
         # Max size of body: struct_range - header_size - crypt_fix - action_and_data
@@ -113,6 +113,8 @@ class WinConnectBase:
 
     def _open_pipe(self): ...
 
+    def _wait_connect(self): ...
+
     def __handle_send_data(self, action, data) -> bytes:
         t = type(data)
         if t == bytes or t == bytearray:
@@ -152,7 +154,7 @@ class WinConnectBase:
     def __read_and_decrypt(self, size):
         data = self.__raw_read(size)
         if self._inited:
-            data = self.__crypto.decrypt(data)
+            data = self._crypto.decrypt(data)
         return data
 
     def _read_message(self) -> (str, Any):
@@ -189,7 +191,7 @@ class WinConnectBase:
             action = action.encode(self.encoding)
             packed_data = self.__handle_send_data(action, data)
             if self._inited:
-                packed_data = self.__crypto.encrypt(packed_data)
+                packed_data = self._crypto.encrypt(packed_data)
 
             message_size = len(packed_data)
             if message_size > self._body_max_size:
@@ -236,7 +238,7 @@ class WinConnectBase:
 
         with self._write_lock:
             for i in range(0, cdata_len, chunk_size):
-                _encrypted = self.__crypto.encrypt(cdata[i:i + chunk_size])
+                _encrypted = self._crypto.encrypt(cdata[i:i + chunk_size])
                 self.__raw_write(_encrypted)
 
     def _parse_action(self, action, data: Any) -> (bool, Any):
@@ -273,8 +275,8 @@ class WinConnectBase:
                 _blank_settings['header_size'] = self._header_size
                 _blank_settings['header_format'] = self._header_format
                 _blank_settings['max_buffer'] = self.read_max_buffer
-                _blank_settings['crypto'] = self.__crypto.crypt_name
-                session_settings = f"set_session_settings:{len(self.__crypto.crypt_salt)}:{json.dumps(_blank_settings)}".encode(self.encoding) + self.__crypto.crypt_salt
+                _blank_settings['crypto'] = self._crypto.crypt_name
+                session_settings = f"set_session_settings:{len(self._crypto.crypt_salt)}:{json.dumps(_blank_settings)}".encode(self.encoding) + self._crypto.crypt_salt
                 self._send_message("cmd", session_settings)
                 return True
             case b'set_session_settings':
@@ -286,9 +288,9 @@ class WinConnectBase:
                 else:
                     data, salt = data_salt, b''
 
-                if salt != self.__crypto.crypt_salt:
+                if salt != self._crypto.crypt_salt:
                     self._log.debug(f"[{self._pipe_name}] Updating salt")
-                    self.__crypto.set_salt(salt)
+                    self._crypto.set_salt(salt)
 
                 try:
                     settings = json.loads(data.decode(self.init_encoding))
@@ -305,7 +307,7 @@ class WinConnectBase:
                     self._log.error(f"{WinConnectErrors.BAD_VERSION}")
                     self._send_error(WinConnectErrors.BAD_VERSION, f"Version mismatch")
                     return self.close()
-                if settings['crypto'] != self.__crypto.crypt_name:
+                if settings['crypto'] != self._crypto.crypt_name:
                     self._log.error(f"{WinConnectErrors.BAD_CRYPTO}")
                     self._send_error(WinConnectErrors.BAD_CRYPTO, f"Crypto mismatch")
                     return self.close()
@@ -342,10 +344,12 @@ class WinConnectBase:
 
     def _close_session(self): ...
 
+    def _close_pipe(self): ...
+
     def close(self):
         self._close_session()
         if self._connected:
-            win32file.CloseHandle(self._pipe)
+            self._close_pipe()
             self._opened = False
             self._connected = False
             self._inited = False
