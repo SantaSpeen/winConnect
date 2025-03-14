@@ -274,7 +274,7 @@ class WinConnectBase:
                 _blank_settings['header_format'] = self._header_format
                 _blank_settings['max_buffer'] = self.read_max_buffer
                 _blank_settings['crypto'] = self.__crypto.crypt_name
-                session_settings = f"set_session_settings:{len(self.__crypto.crypt_salt)}:{orjson.dumps(_blank_settings)}".encode(self.encoding) + self.__crypto.crypt_salt
+                session_settings = f"set_session_settings:{len(self.__crypto.crypt_salt)}:".encode(self.encoding) + orjson.dumps(_blank_settings) + self.__crypto.crypt_salt
                 self._send_message("cmd", session_settings)
                 return True
             case b'set_session_settings':
