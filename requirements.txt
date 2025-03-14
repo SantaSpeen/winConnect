@@ -1,5 +1,5 @@
 # python 3.13
 # 12.03.2025
-pywin32==309
-ormsgpack==1.8.0
-pycryptodome==3.21.0
+pywin32~=309
+ormsgpack~=1.8.0
+pycryptodome~=3.21.0
