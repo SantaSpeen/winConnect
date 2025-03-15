@@ -1,6 +1,6 @@
 import win32pipe
 
-from winConnect.connectors.WinConnectBase import WinConnectBase
+from ._base_base import WinConnectBase
 
 
 class WinConnectServer(WinConnectBase):
@@ -9,19 +9,15 @@ class WinConnectServer(WinConnectBase):
         super().__init__(pipe_name)
         self.run = True
 
-    def _open_pipe(self): ...
-
-    def _wait_connect(self): ...
-
     def _close_session(self):
         self.run = False
 
     def wait_client(self):
         if not self._opened:
-            self._open_pipe()
+            self._open_sock()
         self._wait_connect()
         self._connected = True
-        self._log.debug(f"[{self._pipe_name}] Client connected")
+        self._log.debug(f"[{self._log_prefix}] Client connected")
 
     def read_pipe(self):
         if not self._connected:

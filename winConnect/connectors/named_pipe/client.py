@@ -2,8 +2,8 @@ import pywintypes
 import win32file
 
 from winConnect.exceptions import WinConnectConnectionNoPipeException
-from ._WinConnectNamedPipe import WinConnectNamedPipe
-from ..WinConnectClient import WinConnectClient
+from ._base import WinConnectNamedPipe
+from .._base_client import WinConnectClient
 
 
 class WinConnectPipeClient(WinConnectNamedPipe, WinConnectClient):
@@ -18,7 +18,7 @@ class WinConnectPipeClient(WinConnectNamedPipe, WinConnectClient):
     def __init__(self, pipe_name: str):
         super().__init__(pipe_name)
 
-    def _open_pipe(self):
+    def _open_sock(self):
         try:
             self._pipe = win32file.CreateFile(
                 self._pipe_name,

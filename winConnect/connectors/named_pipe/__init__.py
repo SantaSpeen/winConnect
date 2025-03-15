@@ -1,2 +1,2 @@
-from .WinConnectClient import WinConnectPipeClient
-from .WinConnectServer import WinConnectPipeServer
+from .client import WinConnectPipeClient
+from .server import WinConnectPipeServer

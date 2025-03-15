@@ -1,4 +1,4 @@
-from winConnect.connectors.WinConnectBase import WinConnectBase
+from ._base_base import WinConnectBase
 
 
 class WinConnectClient(WinConnectBase):
@@ -15,14 +15,14 @@ class WinConnectClient(WinConnectBase):
         if not self.closed:
             self._send_message("cmd", b"close:")
 
-    def __check_pipe(self):
+    def __check_sock(self):
         if not self._opened:
-            self._open_pipe()
+            self._open_sock()
         if not self._inited:
             self._init()
 
     def __enter__(self):
-        self.__check_pipe()
+        self.__check_sock()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -30,10 +30,10 @@ class WinConnectClient(WinConnectBase):
 
     def connect(self, program_name: str="NoName"):
         """Connect to server and initialize session"""
-        self._open_pipe()
+        self._open_sock()
         self._init(program_name)
         return self
 
     def read_pipe(self):
-        self.__check_pipe()
+        self.__check_sock()
         return self._read()

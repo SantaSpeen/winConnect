@@ -1,7 +1,7 @@
 import win32pipe
 
-from ._WinConnectNamedPipe import WinConnectNamedPipe
-from ..WinConnectServer import WinConnectServer
+from ._base import WinConnectNamedPipe
+from .._base_server import WinConnectServer
 
 
 class WinConnectPipeServer(WinConnectNamedPipe, WinConnectServer):
@@ -16,12 +16,12 @@ class WinConnectPipeServer(WinConnectNamedPipe, WinConnectServer):
         super().__init__(pipe_name)
         self.run = True
 
-    def _open_pipe(self):
+    def _open_sock(self):
         pipe_nOutBufferSize, pipe_nInBufferSize = self._body_max_size+20, self._body_max_size+20
         self._log.debug(f"[{self._pipe_name}] Creating pipe. "
                         f"Settings: {self.pipe_openMode=}, {self.pipe_pipeMode=}, {self.pipe_nMaxInstances=}, "
                         f"{pipe_nOutBufferSize=}, {pipe_nInBufferSize=}, {self.pipe_nDefaultTimeOut=}, {self.pipe_sa=}")
-        self._pipe = win32pipe.CreateNamedPipe(
+        self._sock = win32pipe.CreateNamedPipe(
             self._pipe_name,
             self.pipe_openMode,
             self.pipe_pipeMode,
@@ -35,4 +35,4 @@ class WinConnectPipeServer(WinConnectNamedPipe, WinConnectServer):
         self._log.debug(f"[{self._pipe_name}] Pipe opened")
 
     def _wait_connect(self):
-        win32pipe.ConnectNamedPipe(self._pipe, None)
+        win32pipe.ConnectNamedPipe(self._sock, None)
